@@ -1,31 +1,44 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="teleoperation_system">
   
-  <!-- Include arm macros -->
-  <xacro:include filename="$(find teleop_description)/urdf/arm_6dof.urdf.xacro"/>
-  <xacro:include filename="$(find teleop_description)/urdf/arm_6dof.ros2_control.xacro"/>
+  <!-- Include UR macro and combined ros2_control -->
+  <xacro:include filename="$(find ur_description)/urdf/ur_macro.xacro"/>
+  <xacro:include filename="$(find teleop_description)/urdf/combined.ros2_control.xacro"/>
+  
+  <!-- UR5 Configuration files -->
+  <xacro:arg name="joint_limit_params" default="$(find ur_description)/config/ur5/joint_limits.yaml"/>
+  <xacro:arg name="kinematics_params" default="$(find ur_description)/config/ur5/default_kinematics.yaml"/>
+  <xacro:arg name="physical_params" default="$(find ur_description)/config/ur5/physical_parameters.yaml"/>
+  <xacro:arg name="visual_params" default="$(find ur_description)/config/ur5/visual_parameters.yaml"/>
   
   <!-- World link -->
   <link name="world"/>
   
-  <!-- Master Arm -->
-  <xacro:property name="master_arm_id" value="master"/>
-  <joint name="world_to_master" type="fixed">
-    <parent link="world"/>
-    <child link="master_base_link"/>
-    <origin xyz="-0.5 0 0" rpy="0 0 0"/>
-  </joint>
+  <!-- Master Arm (UR5) - Default zero position -->
+  <xacro:ur_robot
+    name="master"
+    tf_prefix="master_"
+    parent="world"
+    joint_limits_parameters_file="$(arg joint_limit_params)"
+    kinematics_parameters_file="$(arg kinematics_params)"
+    physical_parameters_file="$(arg physical_params)"
+    visual_parameters_file="$(arg visual_params)">
+    <origin xyz="-0.5 0 0.1" rpy="0 0 0"/>
+  </xacro:ur_robot>
   
-  <!-- Slave Arm -->
-  <xacro:property name="slave_arm_id" value="slave"/>
-  <joint name="world_to_slave" type="fixed">
-    <parent link="world"/>
-    <child link="slave_base_link"/>
-    <origin xyz="0.5 0 0" rpy="0 0 0"/>
-  </joint>
+  <!-- Slave Arm (UR5) - Default zero position -->
+  <xacro:ur_robot
+    name="slave"
+    tf_prefix="slave_"
+    parent="world"
+    joint_limits_parameters_file="$(arg joint_limit_params)"
+    kinematics_parameters_file="$(arg kinematics_params)"
+    physical_parameters_file="$(arg physical_params)"
+    visual_parameters_file="$(arg visual_params)">
+    <origin xyz="0.5 0 0.1" rpy="0 0 0"/>
+  </xacro:ur_robot>
   
-  <!-- Include ros2_control for both arms -->
-  <xacro:arm_6dof_ros2_control arm_id="master" use_sim="true"/>
-  <xacro:arm_6dof_ros2_control arm_id="slave" use_sim="true"/>
+  <!-- SINGLE combined ros2_control for both arms -->
+  <xacro:combined_ros2_control use_sim="true"/>
   
 </robot>

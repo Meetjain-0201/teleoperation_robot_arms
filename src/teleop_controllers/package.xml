@@ -4,6 +4,7 @@
   <name>teleop_controllers</name>
   <version>0.0.1</version>
   <description>Teleoperation controllers for master-slave robotic arms</description>
+  <depend>python3-scipy</depend>
   <maintainer email="meetjain0201@gmail.com">Meet Jain</maintainer>
   <license>Apache License 2.0</license>
 

@@ -23,6 +23,7 @@ setup(
     entry_points={
         'console_scripts': [
             'teleoperation_node = teleop_controllers.teleoperation_node:main',
+            'master_control_bridge = teleop_controllers.master_control_bridge:main',
         ],
     },
 )
