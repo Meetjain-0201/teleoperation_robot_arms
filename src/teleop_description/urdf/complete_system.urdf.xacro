@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="teleoperation_system">
+  
+  <!-- Include arm macros -->
+  <xacro:include filename="$(find teleop_description)/urdf/arm_6dof.urdf.xacro"/>
+  <xacro:include filename="$(find teleop_description)/urdf/arm_6dof.ros2_control.xacro"/>
+  
+  <!-- World link -->
+  <link name="world"/>
+  
+  <!-- Master Arm -->
+  <xacro:property name="master_arm_id" value="master"/>
+  <joint name="world_to_master" type="fixed">
+    <parent link="world"/>
+    <child link="master_base_link"/>
+    <origin xyz="-0.5 0 0" rpy="0 0 0"/>
+  </joint>
+  
+  <!-- Slave Arm -->
+  <xacro:property name="slave_arm_id" value="slave"/>
+  <joint name="world_to_slave" type="fixed">
+    <parent link="world"/>
+    <child link="slave_base_link"/>
+    <origin xyz="0.5 0 0" rpy="0 0 0"/>
+  </joint>
+  
+  <!-- Include ros2_control for both arms -->
+  <xacro:arm_6dof_ros2_control arm_id="master" use_sim="true"/>
+  <xacro:arm_6dof_ros2_control arm_id="slave" use_sim="true"/>
+  
+</robot>
