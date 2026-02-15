@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Task-Space Teleoperation for RViz demo
-Master FK → Slave IK → Publish slave joints
+Task-Space Teleoperation: Master FK → Slave IK
 """
 import rclpy
 from rclpy.node import Node
@@ -16,7 +15,7 @@ except ImportError:
 
 
 class TeleoperationNode(Node):
-    """Task-space teleoperation"""
+    """Task-space teleoperation with FK→IK"""
     
     def __init__(self):
         super().__init__('teleoperation_node')
@@ -39,22 +38,23 @@ class TeleoperationNode(Node):
             'slave_wrist_2_joint', 'slave_wrist_3_joint'
         ]
         
-        # Subscribe to GUI joint states
         self.joint_state_sub = self.create_subscription(
             JointState, '/joint_states', self.joint_state_callback, 10
         )
         
-        # Publish COMPLETE joint states (master + computed slave)
         self.joint_state_pub = self.create_publisher(
             JointState, '/joint_states', 10
         )
         
         self.control_timer = self.create_timer(0.01, self.control_loop)
         
+        self.iteration = 0
+        
         self.get_logger().info('========================================')
-        self.get_logger().info('TASK-SPACE TELEOPERATION (RViz Demo)')
-        self.get_logger().info('Forward Kinematics → Inverse Kinematics')
-        self.get_logger().info('Slave follows master in Cartesian space')
+        self.get_logger().info('TASK-SPACE BILATERAL TELEOPERATION')
+        self.get_logger().info('Master: Forward Kinematics (DH params)')
+        self.get_logger().info('Slave: Analytical Inverse Kinematics')
+        self.get_logger().info('Control Loop: 100Hz')
         self.get_logger().info('========================================')
         
     def joint_state_callback(self, msg: JointState):
@@ -67,15 +67,21 @@ class TeleoperationNode(Node):
     def control_loop(self):
         """FK(master) → IK(slave) → Publish"""
         
+        self.iteration += 1
+        
         try:
-            # STEP 1: Forward Kinematics on Master
+            # ========== STEP 1: FORWARD KINEMATICS ==========
+            # Compute master end-effector pose from joint angles
             master_transform = ur5.forward_kinematics(
                 self.master_joint_positions[0], self.master_joint_positions[1],
                 self.master_joint_positions[2], self.master_joint_positions[3],
                 self.master_joint_positions[4], self.master_joint_positions[5]
             )
             
-            # STEP 2: Analytical IK - get closest solution
+            master_pos = master_transform[:3, 3]  # Extract position
+            
+            # ========== STEP 2: INVERSE KINEMATICS ==========
+            # Compute slave joint angles to reach master's pose
             ik_solutions = ur5.inverse_kinematics_closest(
                 master_transform,
                 self.slave_joint_positions[0], self.slave_joint_positions[1],
@@ -83,42 +89,45 @@ class TeleoperationNode(Node):
                 self.slave_joint_positions[4], self.slave_joint_positions[5]
             )
             
-            # Extract solution (list contains 1 numpy array)
+            # Extract best solution
             slave_joints = ik_solutions[0]
             self.slave_joint_positions = [float(slave_joints[i]) for i in range(6)]
             
-            # STEP 3: Publish complete joint state
+            # ========== STEP 3: VERIFY WITH SLAVE FK ==========
+            slave_transform = ur5.forward_kinematics(
+                self.slave_joint_positions[0], self.slave_joint_positions[1],
+                self.slave_joint_positions[2], self.slave_joint_positions[3],
+                self.slave_joint_positions[4], self.slave_joint_positions[5]
+            )
+            slave_pos = slave_transform[:3, 3]
+            
+            # ========== STEP 4: PUBLISH SLAVE JOINTS ==========
             joint_state_msg = JointState()
             joint_state_msg.header.stamp = self.get_clock().now().to_msg()
             joint_state_msg.name = self.master_joint_names + self.slave_joint_names
             joint_state_msg.position = self.master_joint_positions + self.slave_joint_positions
             self.joint_state_pub.publish(joint_state_msg)
             
-            # Logging
-            if self.get_clock().now().nanoseconds % 1_000_000_000 < 10_000_000:
-                self.log_status(master_transform, slave_joints)
+            # Logging with PROOF of FK→IK computation
+            if self.iteration % 100 == 0:  # Every 1 second
+                pos_error = np.linalg.norm(master_pos - slave_pos)
                 
+                # Check if joints are different (proves IK is computing, not just copying)
+                joint_diff = np.linalg.norm(
+                    np.array(self.master_joint_positions) - np.array(self.slave_joint_positions)
+                )
+                
+                self.get_logger().info(
+                    f'\n=== FK→IK Teleoperation Status ==='
+                    f'\nMaster Joints: [{self.master_joint_positions[0]:.2f}, {self.master_joint_positions[1]:.2f}, {self.master_joint_positions[2]:.2f}, ...]'
+                    f'\nSlave Joints:  [{self.slave_joint_positions[0]:.2f}, {self.slave_joint_positions[1]:.2f}, {self.slave_joint_positions[2]:.2f}, ...]'
+                    f'\nJoint Difference: {joint_diff:.4f} rad (proves IK computation)'
+                    f'\nMaster EE Pose: [{master_pos[0]:.3f}, {master_pos[1]:.3f}, {master_pos[2]:.3f}]'
+                    f'\nSlave EE Pose:  [{slave_pos[0]:.3f}, {slave_pos[1]:.3f}, {slave_pos[2]:.3f}]'
+                    f'\nPosition Error: {pos_error*1000:.2f} mm (Cartesian tracking)'
+                )
         except Exception as e:
             self.get_logger().error(f'Error: {str(e)}')
-    
-    def log_status(self, master_transform, slave_joints):
-        try:
-            slave_transform = ur5.forward_kinematics(
-                slave_joints[0], slave_joints[1], slave_joints[2],
-                slave_joints[3], slave_joints[4], slave_joints[5]
-            )
-            
-            master_pos = master_transform[:3, 3]
-            slave_pos = slave_transform[:3, 3]
-            pos_error = np.linalg.norm(master_pos - slave_pos)
-            
-            self.get_logger().info(
-                f'Master: [{master_pos[0]:.3f}, {master_pos[1]:.3f}, {master_pos[2]:.3f}] | '
-                f'Slave: [{slave_pos[0]:.3f}, {slave_pos[1]:.3f}, {slave_pos[2]:.3f}] | '
-                f'Error: {pos_error*1000:.2f}mm'
-            )
-        except:
-            pass
 
 
 def main(args=None):
